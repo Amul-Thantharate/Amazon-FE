@@ -1,0 +1,70 @@
+pipeline {
+	agent any 
+		tools {
+			jdk 'jdk'
+			nodejs 'nodejs'
+		}
+
+	stages {
+		stage('Git Checkout') {
+			steps {
+				echo 'Checking out...'
+				git branch: 'master', git url: 'https://github.com/Aj7Ay/Amazon-FE.git'
+			}
+		}
+		stage('SonarQube analysis') {
+			steps {
+				withSonarQubeEnv('sonar-server') {
+					sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName="Amazon-FE" \
+					-Dsonar.projectKey="Amazon-FE" '''
+				}
+			}
+		}
+		stage('Qwality Gate') {
+			steps {
+				echo 'Scanning...quality gate'
+				sh waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+			}
+		}
+		stage('OWASP FS SCAN') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+		stage('Install Dependencies') {
+			steps {
+				echo 'Installing dependencies...'
+				sh 'npm install'
+			}
+		}
+		stage('OWASP FS SCAN') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+		stage("TRIVY FS SCAN"){
+			steps{
+				sh 'trivy fs . > result.txt'
+			}
+		}
+		stage("Docker build and Push Tag") {
+			steps {
+			 script {
+				withDockerRegistry(credentialsId: "docke-cred") {
+				  sh "docker build -t amazonfe-app ."
+				  sh "docker tag amazonfe-app:latest  amuldark/amazonfe-app:latest"
+				  sh "docker push amuldark/amazonfe-app:latest"
+				}
+			}
+		stage(TRIVY IMAGE SCAN){
+			steps{
+				sh 'trivy image amuldark/amazonfe-app:latest > result.txt'
+			}
+		}
+		stage("Deploy to container") {
+			steps {
+				sh "docker run -d -p 3000:3000 --name amazonfe-app amuldark/amazonfe-app:latest"
+			}
+		}
