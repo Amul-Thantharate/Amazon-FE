@@ -23,3 +23,5 @@ cd ../Terraform
 terrafom init && terraform apply -auto-approve 
 
 aws ec2 describe-instances --query 'Reservations[*].Instances[*].[InstanceId,PublicIpAddress,State.Name]' --output text | grep running | awk '{print $2}' > name.txt 
+
+echo "Hello world" > name.txt
